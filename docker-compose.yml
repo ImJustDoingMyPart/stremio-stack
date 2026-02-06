@@ -1,0 +1,135 @@
+services:
+  # --- Comet (Stremio Addon) ---
+  comet:
+    image: g0ldyy/comet:latest
+    container_name: comet
+    restart: unless-stopped
+    environment:
+      # Database Connection: Uses the internal Docker container name 'comet-postgres'
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@comet-postgres:5432/${POSTGRES_DB}
+      
+      # Connectivity & Logic
+      # CRITICAL: The public URL where Stremio will reach this addon.
+      # This is used to generate the installation links.
+      # - If using Caddy: https://comet.yourdomain.com
+      # - If using Tailscale Funnel: https://your-server.tailnet.ts.net
+      # - If local only: http://192.168.X.X:8000
+      - BASE_URL=${BASE_URL}
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=8000
+      
+      # Jackett Integration (Internal Docker Communication)
+      - INDEXER_MANAGER_TYPE=jackett
+      - JACKETT_URL=http://jackett:9117
+      - JACKETT_API_KEY=${JACKETT_API_KEY}
+      
+      # Performance & Filtering
+      # CRITICAL: Hides raw P2P links, showing only cached Real-Debrid streams.
+      # This ensures a clean "Netflix-like" experience and prevents playback errors.
+      - DISABLE_TORRENT_STREAMS=True 
+    
+    # --- NETWORKING CONFIGURATION ---
+    # OPTION A: Using a Reverse Proxy (Caddy, Nginx, Traefik) - RECOMMENDED
+    # Keep ports commented out. Traffic flows through the 'proxy_net' network.
+    
+    # OPTION B: Direct Access (No Proxy)
+    # Uncomment the ports below to access Comet via http://YOUR-IP:8000
+    # ports:
+    #   - "8000:8000"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jackett:
+        condition: service_started
+    networks:
+      - proxy_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # --- PostgreSQL Database ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: comet-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    # Performance tuning for PostgreSQL (Optional but recommended for speed)
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=384MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=8MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "max_connections=100"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - proxy_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Jackett (Indexer Manager) ---
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - AUTO_UPDATE=true
+    volumes:
+      - jackett_config:/config
+      - /dev/null:/downloads # Blackhole to avoid errors, not used.
+    # --- NETWORKING CONFIGURATION ---
+    # OPTION A: Reverse Proxy (Recommended). Access via https://jackett.yourdomain.com
+    # OPTION B: Direct Access. Uncomment below to access via http://YOUR-IP:9117
+    # ports:
+    #   - "9117:9117"
+    restart: unless-stopped
+    networks:
+      - proxy_net
+
+  # --- FlareSolverr (Captcha Solver) ---
+  # Helper service for Jackett to bypass Cloudflare protection on some indexers.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=${TZ}
+    networks:
+      - proxy_net
+
+volumes:
+  postgres_data:
+  jackett_config:
+
+networks:
+  proxy_net:
+    # Set to 'true' if you have an existing Caddy/Proxy network.
+    # Set to 'false' (and remove the name if needed) if you want Docker to create it.
+    external: true

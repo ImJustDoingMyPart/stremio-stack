@@ -1,0 +1,55 @@
+{
+    # Global Options
+    # Uncomment 'email' if using a public domain with Let's Encrypt
+    # email your-email@example.com 
+}
+
+# --- 1. Snippets (Reusable Configuration Blocks) ---
+
+# Basic Security Headers
+(base_security) {
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server # Hide Server version for security
+    }
+}
+
+# Proxy Settings (Pass Real IPs to Containers)
+(proxy_settings) {
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+}
+
+# Local TLS (Uncomment if using .lan or local domains without a public resolver)
+# (local_tls) {
+#    tls internal
+# }
+
+# --- 2. Service Definitions ---
+
+# Comet - The Stremio Addon
+# Replace 'comet.lan' with your domain (e.g., addon.yourdomain.com) or local hostname
+comet.lan {
+    import base_security
+    # import local_tls # Uncomment for local .lan domains
+    
+    # Points to the Docker service name 'comet' on port 8000
+    reverse_proxy comet:8000 {
+        import proxy_settings
+    }
+}
+
+# Jackett - Indexer Manager
+# Replace 'jackett.lan' with your domain
+jackett.lan {
+    import base_security
+    # import local_tls # Uncomment for local .lan domains
+
+    # Points to the Docker service name 'jackett' on port 9117
+    reverse_proxy jackett:9117 {
+        import proxy_settings
+    }
+}
