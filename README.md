@@ -66,25 +66,37 @@ docker-compose up -d
 ## 📺 How to use on Chromecast / Android TV / iOS
 Stremio Web and devices like Chromecast often require a valid HTTPS connection to load external addons. Local HTTP addresses (like http://192.168.1.x:8000) often fail or get blocked by Mixed Content policies.
 
-The easiest way to make this work without opening ports on your router is using Tailscale Funnel.
+The easiest way to make this work without opening ports on your router is using **Tailscale Serve**.
 
-A. Step-by-Step for Tailscale Users:
-1. Install Tailscale on your server.
+> **Tailscale Serve vs Funnel:**
+> - **Serve** = Private to your Tailnet only (recommended - only your devices can access)
+> - **Funnel** = Public internet (anyone with the URL can access)
 
-2. Enable Funnel in your Tailscale Admin Console (Access Controls).
+### Step-by-Step for Tailscale Users:
+1. Install Tailscale on your server and all devices that need access (phone, TV, etc.).
 
-3. Run the following command on your server to expose the Comet container publicly via a secure Tailscale URL:
+2. Run the following command on your server to expose Comet privately to your Tailnet:
 
-```Bash
-# Assuming Comet is running on port 8000 internally
-sudo tailscale funnel --bg --https=443 http://localhost:8000
+```bash
+# Expose Comet only to devices on your Tailnet (private)
+tailscale serve --bg --https=443 http://localhost:8000
 ```
 
-4. Tailscale will generate a public URL (e.g., https://my-server.tailnet-name.ts.net). Use that URL as your BASE_URL in the .env file.
+3. Verify it's running privately:
+```bash
+tailscale serve status
+```
 
-5. Restart Comet.
+4. Tailscale will generate a private URL (e.g., `https://my-server.tailnet-name.ts.net`). Use that URL as your `PUBLIC_BASE_URL` in the `.env` file.
 
-6. Configure the addon using the new HTTPS URL. Now it will work perfectly on Chromecast, iOS, and Smart TVs outside your network.
+5. Restart the stack:
+```bash
+docker compose down && docker compose up -d
+```
+
+6. Configure the addon using the new HTTPS URL. Now it will work on Chromecast, iOS, and Smart TVs — but **only from devices logged into your Tailscale account**.
+
+> **Note:** If you need public access (not recommended), use `tailscale funnel` instead of `tailscale serve` and enable Funnel in your Tailscale Admin Console.
 
 ## 📂 Project Structure
 * docker-compose.yml: Main stack definition.
