@@ -1,114 +1,145 @@
-# 🚀 Self-Hosted Stremio Stack
+# Self-Hosted Stremio Stack
 
-A high-performance, secure, and clean self-hosted backend for Stremio.
+A high-performance, self-hosted backend for Stremio with Real-Debrid. Uses **Comet** as the addon, **Jackett** for indexer management, **PostgreSQL** for persistent caching, and built-in scrapers (Torrentio, Zilean) for maximum content coverage.
 
-This stack replaces the traditional Prowlarr setup with **Jackett** for better handling of public indexers, uses **PostgreSQL** for persistent caching, and **Comet** as the high-speed addon. It is designed to be deployed behind a Reverse Proxy (like Caddy) or via Tailscale, keeping all ports closed to the public internet for maximum security.
+## Features
 
-## ✨ Features
+* **Fast:** Background scraper pre-caches popular content. Most searches resolve from local cache in under 3 seconds.
+* **Secure:** No ports exposed by default. PostgreSQL isolated in an internal network with no internet access.
+* **Multi-source:** Three scraping layers (Jackett indexers + Torrentio + Zilean) working together for broad coverage.
+* **Smart caching:** PostgreSQL stores torrent metadata permanently. Repeated searches are instant.
+* **Captcha bypass:** FlareSolverr included for Cloudflare-protected indexers (like 1337x).
 
-* **⚡ Blazing Fast:** Optimized configuration to serve cached results in <2 seconds.
-* **🔒 Secure:** No ports exposed to the host by default. All traffic is routed through an internal Docker network.
-* **🧠 Smart Caching:** Uses PostgreSQL to remember search results, making repeated queries instant.
-* **🧹 Clean UI:** Configured to filter out raw P2P links and only show "Real-Debrid Cached" results (requires Real-Debrid).
-* **🛡️ Captcha Solver:** Includes FlareSolverr to bypass Cloudflare protection on supported indexers.
-
-## 🛠️ Prerequisites
+## Prerequisites
 
 * **Docker** & **Docker Compose** installed.
-* **Real-Debrid** API Key (Required for the "Cached Only" experience).
-* **(Optional)** A Reverse Proxy (Caddy, Nginx, Traefik) OR Tailscale (for external access).
+* **Real-Debrid** API Key.
+* **(Optional)** A reverse proxy (Caddy, Nginx, Traefik) or Tailscale for external access.
 
-## 🚀 Deployment
+## Deployment
 
 ### 1. Clone and Configure
-Clone this repository and create your environment file:
 
 ```bash
-# Copy the example file
+git clone https://github.com/ImJustDoingMyPart/stremio-stack.git
+cd stremio-stack
 cp .env.example .env
-Edit the .env file with your preferred settings. Note: You will need to start the stack once to generate the Jackett API Key, then update the .env file and restart.
 ```
 
-### 2. Start the Stack
+Edit `.env` with your settings. You'll need to start the stack once to get the Jackett API Key, then update `.env` and restart.
+
+### 2. Create the proxy network
+
+If you don't already have a shared proxy network:
+
 ```bash
-docker-compose up -d
+docker network create proxy_net
 ```
-### 3. Final Configuration (Critical Steps)
-#### A. Jackett Configuration (The Performance Secret)
-1. Access Jackett (e.g., http://localhost:9117 or via your proxy).
 
-2. Add Indexers: This stack does not come with pre-configured indexers. You must add them manually.
+If you use Caddy or another reverse proxy, connect it to this same network.
 
-> ⚠️ Performance Tip: * Do not add 50 indexers blindly. This will slow down your search significantly.
-> ⚠️ Pro Tip from the Comet Dev: Avoid adding indexers that strictly require FlareSolverr if you want maximum speed. Cloudflare bypasses can add 10+ seconds to your search time. Recommended fast public indexers: TheRARBG, The Pirate Bay, Knaben. For Anime: Enable native scrapers for Nyaa, AnimeTosho in the Comet config.
-
-3. Test manually: Add a few public indexers and use the "Test" button or perform a manual search.
-
-> ⚠️ The 4-Second Rule: If an indexer takes more than 3-4 seconds to return results, delete it. Comet waits for the slowest indexer. A lean list of fast indexers is better than a huge list of slow ones.
-
-4. Copy API Key: Grab the API Key from the top-right corner of the Jackett dashboard and paste it into your .env file (JACKETT_API_KEY).
-
-5. Restart the stack: docker-compose restart comet.
-
-#### B. Comet Setup
-1. Access the Comet configuration page (e.g., http://localhost:8000/configure or your domain).
-
-2. Real-Debrid API Key: Enter your RD token.
-
-3. Max Results: Set to 10 or 15 (prevents infinite scrolling).
-
-4. Show Cached Only: ✅ CHECK THIS. This ensures you only see content that is ready to stream instantly.
-
-5. Deduplicate Streams: ✅ CHECK THIS to keep your list clean.
-
-6. Click Install to add it to Stremio.
-
-## 📺 How to use on Chromecast / Android TV / iOS
-Stremio Web and devices like Chromecast often require a valid HTTPS connection to load external addons. Local HTTP addresses (like http://192.168.1.x:8000) often fail or get blocked by Mixed Content policies.
-
-The easiest way to make this work without opening ports on your router is using **Tailscale Serve**.
-
-> **Tailscale Serve vs Funnel:**
-> - **Serve** = Private to your Tailnet only (recommended - only your devices can access)
-> - **Funnel** = Public internet (anyone with the URL can access)
-
-### Step-by-Step for Tailscale Users:
-1. Install Tailscale on your server and all devices that need access (phone, TV, etc.).
-
-2. Run the following command on your server to expose Comet privately to your Tailnet:
+### 3. Start the Stack
 
 ```bash
-# Expose Comet only to devices on your Tailnet (private)
+docker compose up -d
+```
+
+### 4. Configure Jackett
+
+1. Access Jackett (via your proxy or `http://YOUR-IP:9117` if ports are uncommented).
+2. **Set FlareSolverr URL** in Settings: `http://flaresolverr:8191`
+3. **Add indexers.** Recommended starting set:
+   - **General:** 1337x, The Pirate Bay, TheRARBG, TorrentGalaxyClone, EZTV, YTS, Knaben, LimeTorrents
+   - **Anime:** Anime Tosho
+   - **Spanish content:** MejorTorrent, DonTorrent
+4. Copy the **API Key** from Jackett's top-right corner into your `.env` file.
+5. Restart Comet: `docker compose restart comet`
+
+> **Tip:** Avoid adding too many indexers. 8-12 well-chosen ones beat 50 slow ones. The `INDEXER_MANAGER_TIMEOUT` (default 12s) will drop slow indexers from results automatically.
+
+### 5. Configure Comet
+
+1. Access the Comet configuration page (`/configure`).
+2. Enter your **Real-Debrid API Key**.
+3. Enable **Show Cached Only** for a clean streaming experience.
+4. Click **Install** to add it to Stremio.
+
+## Architecture
+
+```
+                    ┌─────────────────────────────────────┐
+                    │           proxy_net (internet)       │
+                    │                                      │
+                    │  ┌───────┐  ┌───────┐  ┌──────────┐│
+  Stremio ──────────┼─►│ Comet │  │Jackett│  │FlareSolvr││
+                    │  └──┬────┘  └──┬────┘  └──────────┘│
+                    └─────┼──────────┼────────────────────┘
+                          │          │
+                    ┌─────┼──────────┼────────────────────┐
+                    │     │  internal (no internet)        │
+                    │     ▼          ▼                     │
+                    │  ┌──────────────────┐               │
+                    │  │   PostgreSQL     │               │
+                    │  └──────────────────┘               │
+                    └─────────────────────────────────────┘
+```
+
+* **proxy_net:** External network with internet access. Connects to your reverse proxy.
+* **internal:** Isolated network. PostgreSQL lives here with no internet access.
+* Comet, Jackett, and FlareSolverr bridge both networks.
+
+## How It Works
+
+Comet pulls torrents from **three sources simultaneously**:
+
+| Source | Type | Speed | Coverage |
+|--------|------|-------|----------|
+| **Jackett** | Your configured indexers | Depends on indexer | Customizable |
+| **Torrentio** | Pre-crawled database | Fast | Massive (mainstream) |
+| **Zilean** | DMM hashlist index | Fast | Large (debrid-focused) |
+
+The **background scraper** runs every hour, pre-caching results from all three sources into PostgreSQL. When you search in Stremio, Comet checks the local cache first — if it's fresh enough, you get results in under a second without waiting for any external query.
+
+Content you search manually gets **demand priority**, so it stays fresh in the cache for longer.
+
+## Chromecast / Android TV / iOS
+
+Stremio on these devices requires HTTPS. The easiest way without opening router ports is **Tailscale Serve**:
+
+```bash
+# Expose Comet privately to your Tailnet
 tailscale serve --bg --https=443 http://localhost:8000
 ```
 
-3. Verify it's running privately:
-```bash
-tailscale serve status
-```
+Use the generated URL (e.g., `https://my-server.tailnet.ts.net`) as your `PUBLIC_BASE_URL` in `.env`, restart, and reconfigure the addon.
 
-4. Tailscale will generate a private URL (e.g., `https://my-server.tailnet-name.ts.net`). Use that URL as your `PUBLIC_BASE_URL` in the `.env` file.
+> **Serve** = private to your Tailnet (recommended). **Funnel** = public internet.
 
-5. Restart the stack:
-```bash
-docker compose down && docker compose up -d
-```
+## Performance Tuning
 
-6. Configure the addon using the new HTTPS URL. Now it will work on Chromecast, iOS, and Smart TVs — but **only from devices logged into your Tailscale account**.
+All performance variables have sensible defaults in `docker-compose.yml`. Override them in `.env` only if needed:
 
-> **Note:** If you need public access (not recommended), use `tailscale funnel` instead of `tailscale serve` and enable Funnel in your Tailscale Admin Console.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FASTAPI_WORKERS` | 2 | Gunicorn workers (increase for high concurrency) |
+| `INDEXER_MANAGER_TIMEOUT` | 12s | Max wait per Jackett indexer |
+| `BACKGROUND_SCRAPER_ENABLED` | True | Pre-cache popular content |
+| `BACKGROUND_SCRAPER_CONCURRENT_WORKERS` | 2 | Parallel scraping workers |
+| `SCRAPE_JACKETT` | both | Jackett scraping mode |
+| `SCRAPE_TORRENTIO` | both | Torrentio scraping mode |
+| `SCRAPE_ZILEAN` | both | Zilean scraping mode |
+| `TORRENT_CACHE_TTL` | -1 | Torrent cache lifetime (-1 = permanent) |
+| `LIVE_TORRENT_CACHE_TTL` | 86400 | Seconds before triggering a fresh search |
+| `DEBRID_CACHE_TTL` | 86400 | Debrid availability cache (1 day) |
 
-## 📂 Project Structure
-* docker-compose.yml: Main stack definition.
+Scraper modes: `live` (on-demand only), `background` (pre-cache only), `both`, `false` (disabled).
 
-* .env.example: Template for environment variables.
+## Project Structure
 
-* Caddyfile: (Optional) Configuration example if you prefer using Caddy instead of Tailscale.
+* `docker-compose.yml` — Stack definition with performance defaults.
+* `.env.example` — Template for environment variables.
+* `Caddyfile` — Optional reverse proxy configuration example.
 
-## ⚠️ Notes
-* **Security** The ports section in docker-compose.yml is commented out by default. This is intentional. Traffic should flow through the internal Docker network (proxy_net) to your Reverse Proxy or Tailscale. If you need direct IP access, uncomment the ports in the YAML file.
+## Contributing
 
-* **Logs**: If searches are slow, check the Jackett logs. Identify which indexer is timing out and remove it.
-
-## 🤝 Contributing
-Feel free to fork this repository and submit pull requests to improve the configuration or documentation.
+Feel free to fork this repository and submit pull requests.
