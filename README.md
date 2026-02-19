@@ -102,6 +102,14 @@ The **background scraper** runs every hour, pre-caching results from all three s
 
 Content you search manually gets **demand priority**, so it stays fresh in the cache for longer.
 
+## Subtitles
+
+Subtitles in Stremio are handled by **separate subtitle addons**, completely independent from this stack. Comet only provides the video stream.
+
+**Recommended:** Install the **OpenSubtitles v3** addon in Stremio. It matches subtitles by IMDB ID and works with any stream source, including self-hosted instances.
+
+> **Note for self-hosted instances:** Hash-based subtitle addons (like Subhero) may not work with self-hosted Comet if your instance is only accessible via a private URL (e.g., Tailscale). These services need to reach the stream URL from the internet to compute the file hash. OpenSubtitles v3 has no such requirement and is the reliable choice.
+
 ## Chromecast / Android TV / iOS
 
 Stremio on these devices requires HTTPS. The easiest way without opening router ports is **Tailscale Serve**:
